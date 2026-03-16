@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 
+// --- CONFIGURAÇÃO DE URL DINÂMICA ---
+// Mantendo a mesma lógica do painel para consistência total
+const API_BASE_URL = window.location.hostname === "localhost" 
+  ? "http://localhost:3000" 
+  : "https://sofascore-backend-t9jb.onrender.com";
+
 // Interface para cada entrada de log
 interface LogEntry { 
   time: string; 
@@ -33,7 +39,6 @@ interface ExtractionContextData {
   setFilters: React.Dispatch<React.SetStateAction<{ postponed: boolean; live: boolean; notStarted: boolean; }>>;
   startExtraction: (params: URLSearchParams) => void;
   cancelExtraction: () => void;
-  // Nova função para o botão de limpar
   clearLogs: () => void; 
 }
 
@@ -70,7 +75,6 @@ export function ExtractionProvider({ children }: { children: React.ReactNode }) 
     setLogs(prev => [...prev, { time, level, message }]);
   };
 
-  // Função para limpar o terminal
   const clearLogs = () => {
     setLogs([{ 
       time: "", 
@@ -82,11 +86,12 @@ export function ExtractionProvider({ children }: { children: React.ReactNode }) 
   const startExtraction = (searchParams: URLSearchParams) => {
     setIsRunning(true);
     setProgress(5);
-    setLogs([]); // Limpa logs automaticamente ao iniciar
+    setLogs([]); 
     addLog("system", "[SYSTEM]: Iniciando processo persistente...");
     setPipeline(p => p.map(s => ({ ...s, status: "pending", subtitle: "Aguardando..." })));
 
-    const sse = new EventSource(`http://localhost:3000/api/extrair-stream?${searchParams.toString()}`);
+    // Atualizado para usar API_BASE_URL dinâmica
+    const sse = new EventSource(`${API_BASE_URL}/api/extrair-stream?${searchParams.toString()}`);
     eventSourceRef.current = sse;
 
     sse.onmessage = (event) => {

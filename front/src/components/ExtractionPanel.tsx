@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-// Adicionados: Copy, Check e Trash2 para os novos recursos
 import { 
   Trophy, Calendar, Play, Square, BarChart3, Zap, Layers, FileText, 
   Database, CircleDot, CheckCircle2, Loader2, ChevronDown, ChevronUp,
@@ -13,6 +12,11 @@ import { Checkbox as CheckboxUI } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useExtraction } from "@/components/ExtractionContext";
+
+// --- CONFIGURAÇÃO DE URL DINÂMICA ---
+const API_BASE_URL = window.location.hostname === "localhost" 
+  ? "http://localhost:3000" 
+  : "https://sofascore-backend-t9jb.onrender.com";
 
 const LEAGUES_DATA = [
   { name: "Brasileirão Série A", id: "325", format: "br" },
@@ -56,13 +60,10 @@ export function ExtractionPanel() {
   const [lastSync, setLastSync] = useState(localStorage.getItem("lastSyncTime") || "Nunca");
   const terminalRef = useRef<HTMLDivElement>(null);
 
-  // Estados para o feedback do botão Copy
   const [copied, setCopied] = useState(false);
 
-  // Função para Copiar os Logs para o Clipboard
   const handleCopyLogs = () => {
     if (logs.length === 0) return;
-    
     const textToCopy = logs
       .map(log => `[${log.time || 'SYSTEM'}] [${log.level.toUpperCase()}] ${log.message}`)
       .join('\n');
@@ -79,7 +80,8 @@ export function ExtractionPanel() {
     try {
       const savedUrl = localStorage.getItem("supabaseUrl") || "";
       const savedKey = localStorage.getItem("supabaseKey") || "";
-      const resposta = await fetch("http://localhost:3000/api/status-painel", {
+      // Atualizado para usar API_BASE_URL
+      const resposta = await fetch(`${API_BASE_URL}/api/status-painel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ urlSupabase: savedUrl, chaveSupabase: savedKey }) 
@@ -158,7 +160,6 @@ export function ExtractionPanel() {
 
   return (
     <div className="space-y-4">
-      {/* ... (Seção de Cards de Status mantida igual) */}
       <div className="grid grid-cols-4 gap-4">
         <div className="flex items-center gap-3 rounded-lg border bg-card p-4">
           <Database className="h-5 w-5 text-muted-foreground" />
@@ -195,7 +196,6 @@ export function ExtractionPanel() {
       </div>
 
       <div className="grid grid-cols-5 gap-4">
-        {/* Coluna da Esquerda: Configuração e Módulos */}
         <div className="col-span-3 space-y-3">
           <div className="rounded-lg border bg-card p-5">
             <h3 className="mb-4 text-xs font-bold uppercase text-foreground">Configuração de Campeonato</h3>
@@ -261,7 +261,6 @@ export function ExtractionPanel() {
           </Button>
         </div>
 
-        {/* Coluna da Direita: Pipeline e Terminal */}
         <div className="col-span-2 space-y-3">
           <div className="rounded-lg border bg-card p-5">
             <h3 className="mb-1 text-xs font-bold uppercase text-foreground">Pipeline</h3>
@@ -277,12 +276,10 @@ export function ExtractionPanel() {
             </div>
           </div>
 
-          {/* TERMINAL LIVE ATUALIZADO COM BOTÕES COPY E CLEAR */}
           <div className="group overflow-hidden rounded-lg border bg-card flex flex-col h-[270px] relative">
             <div className="flex items-center justify-between border-b px-4 py-2 bg-card">
               <span className="text-xs font-bold uppercase text-primary">Terminal Live</span>
               <div className="flex items-center gap-2">
-                {/* Botão Copy com Feedback Visual */}
                 <button 
                   onClick={handleCopyLogs}
                   className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-primary transition-all opacity-0 group-hover:opacity-100"
@@ -290,7 +287,6 @@ export function ExtractionPanel() {
                 >
                   {copied ? <CheckCircle2 className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
                 </button>
-                {/* Botão Clear */}
                 <button 
                   onClick={clearLogs}
                   className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-destructive transition-all opacity-0 group-hover:opacity-100"
