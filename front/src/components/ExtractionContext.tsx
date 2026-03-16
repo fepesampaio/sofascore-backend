@@ -3,9 +3,7 @@ import { useToast } from "@/hooks/use-toast";
 
 // --- CONFIGURAÇÃO DE URL DINÂMICA ---
 // Mantendo a mesma lógica do painel para consistência total
-const API_BASE_URL = window.location.hostname === "localhost" 
-  ? "http://localhost:3000" 
-  : "https://sofascore-backend-t9jb.onrender.com";
+const API_BASE_URL = "http://localhost:3000" 
 
 // Interface para cada entrada de log
 interface LogEntry { 
