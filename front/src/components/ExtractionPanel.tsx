@@ -80,7 +80,6 @@ export function ExtractionPanel() {
     try {
       const savedUrl = localStorage.getItem("supabaseUrl") || "";
       const savedKey = localStorage.getItem("supabaseKey") || "";
-      // Atualizado para usar API_BASE_URL
       const resposta = await fetch(`${API_BASE_URL}/api/status-painel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -195,8 +194,9 @@ export function ExtractionPanel() {
         </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
-        <div className="col-span-3 space-y-3">
+      <div className="grid grid-cols-5 gap-4 items-stretch">
+        {/* COLUNA DA ESQUERDA: Agora usando space-y-3 para alinhar perfeitamente com a direita */}
+        <div className="col-span-3 flex flex-col space-y-3">
           <div className="rounded-lg border bg-card p-5">
             <h3 className="mb-4 text-xs font-bold uppercase text-foreground">Configuração de Campeonato</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -225,7 +225,7 @@ export function ExtractionPanel() {
             </div>
           </div>
 
-          <div className="rounded-lg border bg-card p-5">
+          <div className="rounded-lg border bg-card p-5 flex-1 flex flex-col">
             <h3 className="mb-4 text-xs font-bold uppercase text-foreground">Módulos de Extração</h3>
             <div className="grid grid-cols-4 gap-3">
               {DATA_MODULES.map(mod => (
@@ -239,7 +239,7 @@ export function ExtractionPanel() {
                 </button>
               ))}
             </div>
-            <div className="mt-5 space-y-3 border-t pt-4">
+            <div className="mt-auto space-y-3 border-t pt-4">
               <div className="flex items-start gap-3">
                 <CheckboxUI id="p" checked={filters.postponed} onCheckedChange={(v) => setFilters(f => ({...f, postponed: v as boolean}))} disabled={isRunning} />
                 <label htmlFor="p" className="text-sm font-medium cursor-pointer">Ignorar jogos adiados</label>
@@ -255,12 +255,19 @@ export function ExtractionPanel() {
             </div>
           </div>
 
-          <Button variant={isRunning ? "destructive" : "engine"} size="lg" className="w-full" onClick={isRunning ? cancelExtraction : handleStartRequest} disabled={!league || !season}>
+          <Button 
+            variant={isRunning ? "destructive" : "engine"} 
+            size="lg" 
+            className="w-full mt-0" 
+            onClick={isRunning ? cancelExtraction : handleStartRequest} 
+            disabled={!league || !season}
+          >
             {isRunning ? <Square className="h-5 w-5 mr-2" /> : <Play className="h-5 w-5 mr-2" />}
             {isRunning ? "Cancelar Extração" : "Iniciar a extração"}
           </Button>
         </div>
 
+        {/* COLUNA DA DIREITA: Mantida integralmente conforme o arquivo original */}
         <div className="col-span-2 space-y-3">
           <div className="rounded-lg border bg-card p-5">
             <h3 className="mb-1 text-xs font-bold uppercase text-foreground">Pipeline</h3>

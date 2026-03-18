@@ -1,19 +1,19 @@
 {
-  "name": "sofascore-extractor",
+  "name": "sofascore-node",
   "version": "1.0.0",
-  "description": "Extrator de dados do Sofascore para o Supabase",
+  "description": "Motor de extração de dados SofaScore - Local Feira de Santana",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "concurrently \"node server.js\" \"cd front && npm run dev\"",
+    "start": "node server.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.99.1",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "dotenv": "^16.4.5"
+    "@supabase/supabase-js": "^2.49.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
   },
-  "engines": {
-    "node": ">=20.0.0"
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }
