@@ -10,41 +10,29 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-/**
- * Filtro "SaaS" para o Terminal Live:
- * Oculta caminhos e nomes de arquivos, traduzindo logs técnicos para status amigáveis.
- */
 const formatLogPath = (text) => {
   let msg = text;
 
-  // 1. Traduz as mensagens de leitura (Python)
   if (msg.includes('Lendo:')) {
     return 'Analisando dados brutos extraídos...';
   }
-  
-  // 2. Traduz as mensagens de conclusão de arquivo (Python)
+
   if (msg.includes('Arquivo pronto:') || msg.includes('CSV salvo em:')) {
     return 'Lote de dados formatado e preparado para envio.';
   }
-  
-  // 3. Traduz o aviso de quando não tem dados para importar (Node - import.js)
+
   if (msg.includes('Arquivo não encontrado, pulando:')) {
     return 'Aviso: Nenhum dado capturado para este módulo. Pulando etapa...';
   }
-  
-  // 4. Traduz o início do upload para o Supabase (Node - import.js)
+
   if (msg.includes('Iniciando:') && msg.includes('-> Tabela:')) {
     const tabela = msg.split('Tabela:')[1]?.trim() || 'banco de dados';
     return `Sincronizando lote de dados -> Tabela: ${tabela}`;
   }
 
-  // 5. Fallback de segurança: Se ainda sobrar algum caminho do Windows ou arquivo, mascara.
   return msg.replace(/(?:[a-zA-Z]:\\[^\s]+|[a-zA-Z0-9_-]+\.(?:json|csv))/gi, 'lote de dados');
 };
 
-/**
- * Função auxiliar para executar scripts (Node ou Python) e transmitir logs via SSE
- */
 const runScript = (command, args, envs, res, label) => {
   return new Promise((resolve, reject) => {
     const process = spawn(command, args, { 
@@ -89,8 +77,6 @@ const runScript = (command, args, envs, res, label) => {
     });
   });
 };
-
-// --- ROTAS DE STATUS E HISTÓRICO ---
 
 app.get('/api/status', (req, res) => {
   res.json({ status: 'online', message: 'Motor Node.js operando!' });
@@ -146,8 +132,6 @@ app.post('/api/status-painel', async (req, res) => {
   res.json({ apiHealth, apiPing, supabaseStatus, totalRows });
 });
 
-// --- ROTA PRINCIPAL DE EXTRAÇÃO ---
-
 app.get('/api/extrair-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -182,6 +166,7 @@ app.get('/api/extrair-stream', async (req, res) => {
     SE_SEASON: temporadaLimpa,
     SE_TOURNAMENT_ID: tournamentId,
     SE_DELAY_MS: delay,
+	SE_UPLOAD_DELAY_MS: uploadDelay,
     SE_MODULO: modulo,
     SE_OUTPUT_DIR: outputDir,
     SE_FILTER_POSTPONED: filterPostponed,
@@ -228,8 +213,7 @@ app.get('/api/extrair-stream', async (req, res) => {
     res.write(`data: ${JSON.stringify({ type: 'success', message: '✓ JSONs baixados.', stepIndex: 1, progress: 40 })}\n\n`);
 
     res.write(`data: ${JSON.stringify({ type: 'system', message: 'Iniciando processamento dos módulos...', stepIndex: 2, progress: 45 })}\n\n`);
-    
-    // PASSO 2: Conversão
+
     const hasAll = modulosSelecionados.includes("all");
     if (hasAll || modulosSelecionados.includes("stats")) await runScript('node', ['conv-stats.js'], envs, res, 'JS-STATS');
     if (hasAll || modulosSelecionados.includes("incidents")) await runScript('node', ['conv-incidents.js'], envs, res, 'JS-INCIDENTS');
@@ -237,7 +221,6 @@ app.get('/api/extrair-stream', async (req, res) => {
 
     res.write(`data: ${JSON.stringify({ type: 'success', message: '✓ Processamento de módulos concluído.', progress: 80 })}\n\n`);
 
-    // PASSO 3: Sincronização
     res.write(`data: ${JSON.stringify({ type: 'system', message: 'Iniciando upload para o banco...', stepIndex: 3, progress: 85 })}\n\n`);
     await runScript('node', ['import.js'], envs, res, 'SYNC-DB');
 

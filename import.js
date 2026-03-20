@@ -11,7 +11,7 @@ const TABLES = ["statistics", "incidents", "lineups"];
 
 const GUI_MODE = process.env.SE_GUI_MODE === "1";
 const _BATCH = GUI_MODE ? (parseInt(process.env.SE_BATCH_SIZE) || BATCH_SIZE) : BATCH_SIZE;
-const _DELAY = GUI_MODE ? (parseInt(process.env.SE_DELAY_MS)   || DELAY_MS)   : DELAY_MS;
+const _DELAY = GUI_MODE ? (parseInt(process.env.IMPORT_DELAY_MS)   || DELAY_MS)   : DELAY_MS;
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const ask = (q) => new Promise((res) => rl.question(q, res));
@@ -56,6 +56,79 @@ function parseCSV(filePath) {
       }
     });
     return obj;
+  });
+}
+
+// 🆕 NOVA FUNÇÃO: Obter colunas válidas da tabela
+async function getTableColumns(tableName, dbUrl, dbKey) {
+  return new Promise((resolve, reject) => {
+    // Query para pegar o schema da tabela
+    const url = new URL(`/rest/v1/${tableName}?limit=0`, dbUrl);
+    
+    const options = {
+      hostname: url.hostname,
+      path:     url.pathname + url.search,
+      method:   "HEAD",
+      headers: {
+        "apikey":          dbKey,
+        "Authorization":   `Bearer ${dbKey}`,
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      // O Supabase retorna as colunas no header "Content-Range"
+      // ou podemos fazer um SELECT para pegar a estrutura
+      
+      // Alternativa mais confiável: fazer um SELECT com limit 1
+      const selectUrl = new URL(`/rest/v1/${tableName}?limit=1`, dbUrl);
+      const selectOptions = {
+        hostname: selectUrl.hostname,
+        path:     selectUrl.pathname + selectUrl.search,
+        method:   "GET",
+        headers: {
+          "apikey":          dbKey,
+          "Authorization":   `Bearer ${dbKey}`,
+        },
+      };
+
+      const selectReq = https.request(selectOptions, (selectRes) => {
+        let data = "";
+        selectRes.on("data", (chunk) => (data += chunk));
+        selectRes.on("end", () => {
+          try {
+            const rows = JSON.parse(data);
+            if (rows.length > 0) {
+              const columns = Object.keys(rows[0]);
+              resolve(columns);
+            } else {
+              // Se tabela vazia, tenta outro método
+              resolve([]);
+            }
+          } catch (e) {
+            reject(new Error(`Erro ao parsear colunas: ${e.message}`));
+          }
+        });
+      });
+
+      selectReq.on("error", reject);
+      selectReq.end();
+    });
+
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+// 🆕 NOVA FUNÇÃO: Filtrar apenas colunas válidas
+function filterRowColumns(rows, validColumns) {
+  return rows.map(row => {
+    const filtered = {};
+    validColumns.forEach(col => {
+      if (col in row) {
+        filtered[col] = row[col];
+      }
+    });
+    return filtered;
   });
 }
 
@@ -131,31 +204,45 @@ async function main() {
   for (const task of tasks) {
     console.log(`\nIniciando: ${path.basename(task.path)} -> Tabela: ${task.table}`);
     
-	const rows = parseCSV(task.path);
-    
-    const uniqueRows = task.table === "statistics" 
-      ? Array.from(new Map(rows.map(item => [item['match_id'], item])).values())
-      : rows;
+    try {
+      // 🆕 Obter colunas válidas da tabela
+      console.log(`  Validando colunas da tabela ${task.table}...`);
+      const validColumns = await getTableColumns(task.table, supabaseUrl, supabaseKey);
+      console.log(`  Colunas encontradas: ${validColumns.length}`);
+      
+      const rows = parseCSV(task.path);
+      
+      // 🆕 Filtrar apenas colunas que existem na tabela
+      const filteredRows = filterRowColumns(rows, validColumns);
+      console.log(`  Colunas no CSV: ${Object.keys(rows[0] || {}).length}`);
+      console.log(`  Colunas válidas para envio: ${Object.keys(filteredRows[0] || {}).length}`);
+      
+      const uniqueRows = task.table === "statistics" 
+        ? Array.from(new Map(filteredRows.map(item => [item['match_id'], item])).values())
+        : filteredRows;
 
-    const total = uniqueRows.length;
-    const batches = Math.ceil(total / _BATCH);
-    
-    let inserted = 0;
+      const total = uniqueRows.length;
+      const batches = Math.ceil(total / _BATCH);
+      
+      let inserted = 0;
 
-    for (let i = 0; i < batches; i++) {
-      const batch = rows.slice(i * _BATCH, (i + 1) * _BATCH);
-      process.stdout.write(`  Lote ${i + 1}/${batches} (${inserted}/${total})...\r`);
+      for (let i = 0; i < batches; i++) {
+        const batch = uniqueRows.slice(i * _BATCH, (i + 1) * _BATCH);
+        process.stdout.write(`  Lote ${i + 1}/${batches} (${inserted}/${total})...\r`);
 
-      try {
+        try {
 
-        await insertBatch(batch, task.table, supabaseUrl, supabaseKey, task.conflict);
-        inserted += batch.length;
-      } catch (err) {
-        console.log(`\n  [ERRO] Lote ${i + 1} na tabela ${task.table}: ${err.message}`);
+          await insertBatch(batch, task.table, supabaseUrl, supabaseKey, task.conflict);
+          inserted += batch.length;
+        } catch (err) {
+          console.log(`\n  [ERRO] Lote ${i + 1} na tabela ${task.table}: ${err.message}`);
+        }
+        await sleep(_DELAY);
       }
-      await sleep(_DELAY);
+      console.log(`\n✓ ${task.table} finalizada. (${inserted} registros inseridos)`);
+    } catch (err) {
+      console.log(`\n✗ ERRO ao processar ${task.table}: ${err.message}`);
     }
-    console.log(`\n✓ ${task.table} finalizada.`);
   }
 
   console.log("\n=== TODAS AS IMPORTAÇÕES CONCLUÍDAS ===");
