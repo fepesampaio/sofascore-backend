@@ -122,6 +122,7 @@ async function getAllMatches(seasonId, rounds, processedGames) {
           scoreHome: e.homeScore?.current, scoreAway: e.awayScore?.current,
           status: desc, startTime: e.startTimestamp ? new Date(e.startTimestamp * 1000).toISOString() : null,
         });
+		processedGames.add(e.id);
       });
     } catch (err) {}
     await sleep(DELAY_MS);

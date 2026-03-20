@@ -7,10 +7,8 @@ const readline = require("readline");
 const BATCH_SIZE   = 1000;
 const DELAY_MS     = 300;
 
-// ── Tabelas Atualizadas no Supabase ──────────────────────────────────
 const TABLES = ["statistics", "incidents", "lineups"];
 
-// ── Modo GUI (Preparado para o Front-end React) ──────────────────────
 const GUI_MODE = process.env.SE_GUI_MODE === "1";
 const _BATCH = GUI_MODE ? (parseInt(process.env.SE_BATCH_SIZE) || BATCH_SIZE) : BATCH_SIZE;
 const _DELAY = GUI_MODE ? (parseInt(process.env.SE_DELAY_MS)   || DELAY_MS)   : DELAY_MS;
@@ -22,7 +20,6 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// ── Parser de CSV Simples ────────────────────────────────────────────
 function parseCSV(filePath) {
   const content = fs.readFileSync(filePath, "utf-8");
   const lines   = content.split("\n").filter((l) => l.trim());
@@ -41,10 +38,14 @@ function parseCSV(filePath) {
 
     const obj = {};
     headers.forEach((h, i) => {
+
+      if (h === "id") return; 
+
       const val = (values[i] || "").trim();
+
       if (val === "") {
         obj[h] = null;
-      } else if (!isNaN(val) && val !== "") {
+      } else if (!isNaN(val) && val !== "" && h !== "match_id") {
         obj[h] = Number(val);
       } else if (val === "true") {
         obj[h] = true;
@@ -58,11 +59,10 @@ function parseCSV(filePath) {
   });
 }
 
-// ── Inserção no Supabase (Atualizado para UPSERT) ────────────────────
 function insertBatch(rows, tableName, dbUrl, dbKey, conflictKey) {
   return new Promise((resolve, reject) => {
     const body    = JSON.stringify(rows);
-    // Adicionado o on_conflict na URL apontando para a chave primária
+    
     const url     = new URL(`/rest/v1/${tableName}?on_conflict=${conflictKey}`, dbUrl);
     
     const options = {
@@ -73,7 +73,6 @@ function insertBatch(rows, tableName, dbUrl, dbKey, conflictKey) {
         "Content-Type":    "application/json",
         "apikey":          dbKey,
         "Authorization":   `Bearer ${dbKey}`,
-        // Alterado para merge-duplicates para ativar o Upsert
         "Prefer":          "return=minimal, resolution=merge-duplicates",
         "Content-Length":  Buffer.byteLength(body),
       },
@@ -94,7 +93,6 @@ function insertBatch(rows, tableName, dbUrl, dbKey, conflictKey) {
   });
 }
 
-// ── Main ──────────────────────────────────────────────────────────────
 async function main() {
   console.log("=== IMPORTADOR SUPABASE (ESTEIRA AUTOMÁTICA) ===\n");
 
@@ -108,9 +106,8 @@ async function main() {
     const season = process.env.SE_SEASON || "2026";
     const baseDir = path.join(process.cwd(), "output");
 
-    // MAPEAMENTO EXATO: Arquivo -> Tabela -> Chave de Conflito
     const fileConfigs = [
-      { file: `results_${tournament}_${season}_supabase.csv`, table: "statistics", conflict: "id" },
+      { file: `results_${tournament}_${season}_supabase.csv`, table: "statistics", conflict: "match_id" },
       { file: `incidents_${tournament}_${season}_supabase.csv`, table: "incidents", conflict: "id" },
       { file: `lineups_${tournament}_${season}_supabase.csv`, table: "lineups", conflict: "id" }
     ];
@@ -118,7 +115,7 @@ async function main() {
     for (const config of fileConfigs) {
       const fullPath = path.join(baseDir, config.file);
       if (fs.existsSync(fullPath)) {
-        // Agora salvamos a chave de conflito na task
+
         tasks.push({ path: fullPath, table: config.table, conflict: config.conflict });
       } else {
         console.log(`[AVISO]: Arquivo não encontrado, pulando: ${config.file}`);
@@ -131,12 +128,16 @@ async function main() {
     }
   }
 
-  // Processamento sequencial das tarefas
   for (const task of tasks) {
     console.log(`\nIniciando: ${path.basename(task.path)} -> Tabela: ${task.table}`);
     
-    const rows = parseCSV(task.path);
-    const total = rows.length;
+	const rows = parseCSV(task.path);
+    
+    const uniqueRows = task.table === "statistics" 
+      ? Array.from(new Map(rows.map(item => [item['match_id'], item])).values())
+      : rows;
+
+    const total = uniqueRows.length;
     const batches = Math.ceil(total / _BATCH);
     
     let inserted = 0;
@@ -146,7 +147,7 @@ async function main() {
       process.stdout.write(`  Lote ${i + 1}/${batches} (${inserted}/${total})...\r`);
 
       try {
-        // Passando a chave de conflito para a função
+
         await insertBatch(batch, task.table, supabaseUrl, supabaseKey, task.conflict);
         inserted += batch.length;
       } catch (err) {
