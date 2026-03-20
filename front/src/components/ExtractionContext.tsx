@@ -1,11 +1,8 @@
-import React, { createContext, useContext, useState, useRef, useEffect } from "react";
+import React, { createContext, useContext, useState, useRef} from "react";
 import { useToast } from "@/hooks/use-toast";
 
-// --- CONFIGURAÇÃO DE URL DINÂMICA ---
-// Mantendo a mesma lógica do painel para consistência total
 const API_BASE_URL = "http://localhost:3000" 
 
-// Interface para cada entrada de log
 interface LogEntry { 
   time: string; 
   level: "info" | "warn" | "error" | "success" | "system"; 

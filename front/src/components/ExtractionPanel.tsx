@@ -13,10 +13,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useExtraction } from "@/components/ExtractionContext";
 
-// --- CONFIGURAÇÃO DE URL DINÂMICA ---
-const API_BASE_URL = window.location.hostname === "localhost" 
-  ? "http://localhost:3000" 
-  : "https://sofascore-backend-t9jb.onrender.com";
+const API_BASE_URL = "http://localhost:3000" 
 
 const LEAGUES_DATA = [
   { name: "Brasileirão Série A", id: "325", format: "br" },
@@ -117,9 +114,16 @@ export function ExtractionPanel() {
 
   const toggleModule = (id: string) => {
     setSelectedModules(prev => {
-      if (id === "all") return prev.includes("all") ? [] : ["all"];
-      const semAll = prev.filter(m => m !== "all");
-      return semAll.includes(id) ? semAll.filter(m => m !== id) : [...semAll, id];
+      if (id === "all") {
+        return prev.includes("all") ? [] : ["all"];
+      }
+	  
+      const withoutAll = prev.filter(m => m !== "all");
+      if (withoutAll.includes(id)) {
+        return withoutAll.filter(m => m !== id);
+      } else {
+        return [...withoutAll, id];
+      }
     });
   };
   
