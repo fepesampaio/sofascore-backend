@@ -28,6 +28,7 @@ function loadProcessedGames() {
       const data = fs.readFileSync(LOG_FILE, "utf8");
       return new Set(JSON.parse(data));
     } catch (err) {
+      console.warn(`[AVISO] Erro ao carregar jogos processados: ${err.message}`);
       return new Set();
     }
   }
@@ -35,65 +36,96 @@ function loadProcessedGames() {
 }
 
 function saveProcessedGames(processedSet) {
-  fs.writeFileSync(LOG_FILE, JSON.stringify(Array.from(processedSet), null, 2), "utf8");
+  try {
+    fs.writeFileSync(LOG_FILE, JSON.stringify(Array.from(processedSet), null, 2), "utf8");
+    console.log(`✓ Registro de partidas salvo: ${LOG_FILE}`);
+  } catch (err) {
+    console.error(`❌ Erro ao salvar registro de partidas: ${err.message}`);
+  }
+}
+
+// MELHORIA: Validação de variáveis de ambiente obrigatórias
+function validateEnvironment() {
+  const required = ['SE_TOURNAMENT_ID', 'SE_TOURNAMENT_NAME', 'SE_SEASON'];
+  const missing = required.filter(v => !process.env[v]);
+  if (missing.length > 0) {
+    console.error(`❌ ERRO: Variáveis de ambiente obrigatórias não definidas: ${missing.join(', ')}`);
+    process.exit(1);
+  }
 }
 
 async function getTournamentInfo() {
   console.log("Buscando informacoes do campeonato (id: " + TOURNAMENT_ID + ")...");
-  const data = await get("/unique-tournament/" + TOURNAMENT_ID);
-  const t = data.uniqueTournament || {};
-  console.log("Campeonato: " + (t.name || "Desconhecido"));
-  return t;
+  try {
+    const data = await get("/unique-tournament/" + TOURNAMENT_ID);
+    const t = data.uniqueTournament || {};
+    console.log("Campeonato: " + (t.name || "Desconhecido"));
+    return t;
+  } catch (err) {
+    console.error(`❌ Erro ao buscar informações do campeonato: ${err.message}`);
+    throw err;
+  }
 }
 
 async function getSeason() {
   console.log("Buscando temporadas disponiveis...");
-  const data    = await get("/unique-tournament/" + TOURNAMENT_ID + "/seasons");
-  const seasons = data.seasons || [];
+  try {
+    const data    = await get("/unique-tournament/" + TOURNAMENT_ID + "/seasons");
+    const seasons = data.seasons || [];
 
-  if (GUI_MODE) {
-    const sentSeason = String(SEASON_YEAR);
-    const baseYear = sentSeason.substring(0, 4); 
-    const shortYear = baseYear.substring(2, 4);  
-    const nextYear = String(Number(baseYear) + 1); 
-    const nextShort = nextYear.substring(2, 4);  
+    if (GUI_MODE) {
+      const sentSeason = String(SEASON_YEAR);
+      const baseYear = sentSeason.substring(0, 4); 
+      const shortYear = baseYear.substring(2, 4);  
+      const nextYear = String(Number(baseYear) + 1); 
+      const nextShort = nextYear.substring(2, 4);  
 
-    const formatosPossiveis = [
-      sentSeason, baseYear, `${baseYear}/${nextYear}`, `${shortYear}/${nextShort}`, `${shortYear}/${nextYear}` 
-    ];
+      const formatosPossiveis = [
+        sentSeason, baseYear, `${baseYear}/${nextYear}`, `${shortYear}/${nextShort}`, `${shortYear}/${nextYear}` 
+      ];
+      
+      const found = seasons.find((s) => {
+        const apiYear = String(s.year);
+        const apiName = s.name ? String(s.name) : "";
+        return apiYear === baseYear || formatosPossiveis.some(formato => apiName.includes(formato) || apiYear === formato);
+      });
+
+      if (!found) {
+        console.error(`\n[ERRO] Temporada '${SEASON_YEAR}' não encontrada!`);
+        process.exit(1); 
+      }
+      
+      console.log("Temporada selecionada: " + (found.name || found.year));
+      return found;
+    }  
     
-    const found = seasons.find((s) => {
-      const apiYear = String(s.year);
-      const apiName = s.name ? String(s.name) : "";
-      return apiYear === baseYear || formatosPossiveis.some(formato => apiName.includes(formato) || apiYear === formato);
-    });
+    const top5 = seasons.slice(0, 5); 
+    top5.forEach((s, idx) => console.log(`  ${idx + 1}. ${s.name || s.year}`));
 
-    if (!found) {
-      console.error(`\n[ERRO] Temporada '${SEASON_YEAR}' não encontrada!`);
-      process.exit(1); 
+    let opt = -1;
+    // CORREÇÃO: Operador lógico correto para validação
+    while (![1, 2, 3, 4, 5].includes(opt) || opt > top5.length) {
+      const ans = await ask(`\nEscolha a temporada (1 a ${top5.length}): `);
+      opt = parseInt(ans);
     }
-    
-    console.log("Temporada selecionada: " + (found.name || found.year));
+
+    const found = top5[opt - 1];
+    console.log("\nTemporada selecionada: " + (found.name || found.year));
     return found;
-  }  
-  
-  const top5 = seasons.slice(0, 5); 
-  top5.forEach((s, idx) => console.log(`  ${idx + 1}. ${s.name || s.year}`));
-
-  let opt = -1;
-  while (![1, 2, 3, 4, 5].includes(opt) || opt > top5.length) {
-    const ans = await ask(`\nEscolha a temporada (1 a ${top5.length}): `);
-    opt = parseInt(ans);
+  } catch (err) {
+    console.error(`❌ Erro ao buscar temporadas: ${err.message}`);
+    throw err;
   }
-
-  const found = top5[opt - 1];
-  console.log("\nTemporada selecionada: " + (found.name || found.year));
-  return found;
 }
 
 async function getRounds(seasonId) {
-  const data = await get("/unique-tournament/" + TOURNAMENT_ID + "/season/" + seasonId + "/rounds");
-  return data.rounds || [];
+  try {
+    const data = await get("/unique-tournament/" + TOURNAMENT_ID + "/season/" + seasonId + "/rounds");
+    return data.rounds || [];
+  } catch (err) {
+    console.error(`❌ Erro ao buscar rodadas: ${err.message}`);
+    throw err;
+  }
 }
 
 async function getAllMatches(seasonId, rounds, processedGames) {
@@ -122,92 +154,142 @@ async function getAllMatches(seasonId, rounds, processedGames) {
           scoreHome: e.homeScore?.current, scoreAway: e.awayScore?.current,
           status: desc, startTime: e.startTimestamp ? new Date(e.startTimestamp * 1000).toISOString() : null,
         });
-		processedGames.add(e.id);
+
+        processedGames.add(e.id);
       });
-    } catch (err) {}
+    } catch (err) {
+      console.warn(`[AVISO] Erro ao buscar partidas da rodada ${roundNum}: ${err.message}`);
+    }
     await sleep(DELAY_MS);
   }
   console.log("\nNovas partidas encontradas: " + allMatches.length);
   return allMatches;
 }
 
-// MELHORIA 3: Padronização de nomes e simplificação das funções de extração
-async function getAllStatistics(matches, fullPath) {
+// MELHORIA: Função genérica para reduzir duplicação
+async function processMatchesGeneric(matches, fullPath, extractData, processData, label) {
   let results = [];
-  try { if (fs.existsSync(fullPath)) results = JSON.parse(fs.readFileSync(fullPath, "utf8")); } catch(e) {}
   
+  // Carregar resultados existentes
+  try { 
+    if (fs.existsSync(fullPath)) {
+      results = JSON.parse(fs.readFileSync(fullPath, "utf8"));
+      console.log(`✓ Arquivo existente carregado: ${fullPath} (${results.length} registros)`);
+    } 
+  } catch(err) {
+    console.warn(`[AVISO] Não foi possível carregar arquivo existente ${fullPath}: ${err.message}`);
+    results = [];
+  }
+
   const total = matches.length;
   for (let i = 0; i < total; i++) {
     const match = matches[i];
-    process.stdout.write("  Estatisticas: " + (i + 1) + "/" + total + " | " + match.home + " x " + match.away + "          \r");
-    let statistics = null;
+    process.stdout.write(`  ${label}: ${i + 1}/${total} | ${match.home} x ${match.away}          \r`);
+    
     try {
-      const data = await get("/event/" + match.id + "/statistics");
-      statistics = data.statistics || [];
-    } catch (_) {}
-
-    results.push({
-      matchId: match.id, round: match.round, home: match.home, away: match.away,
-      scoreHome: match.scoreHome, scoreAway: match.scoreAway, status: match.status,
-      startTime: match.startTime, statistics: statistics,
-    });
+      const data = await extractData(match.id);
+      const processed = processData(data, match);
+      
+      // Se processData retorna array, fazer spread
+      if (Array.isArray(processed)) {
+        results.push(...processed);
+      } else {
+        results.push(processed);
+      }
+    } catch (err) {
+      console.warn(`[AVISO] Erro ao processar ${label} para partida ${match.home} x ${match.away} (ID: ${match.id}): ${err.message}`);
+    }
+    
     await sleep(DELAY_MS);
   }
-  fs.writeFileSync(fullPath, JSON.stringify(results, null, 2), "utf8");
+  
+  try {
+    fs.writeFileSync(fullPath, JSON.stringify(results, null, 2), "utf8");
+    console.log(`\n✓ ${label} salvo: ${fullPath} (${results.length} registros)`);
+  } catch (err) {
+    console.error(`❌ Erro ao salvar ${label}: ${err.message}`);
+  }
+}
+
+async function getAllStatistics(matches, fullPath) {
+  await processMatchesGeneric(
+    matches,
+    fullPath,
+    async (matchId) => await get(`/event/${matchId}/statistics`),
+    (data, match) => ({
+      matchId: match.id,
+      round: match.round,
+      home: match.home,
+      away: match.away,
+      scoreHome: match.scoreHome,
+      scoreAway: match.scoreAway,
+      status: match.status,
+      startTime: match.startTime,
+      statistics: data.statistics || [],
+    }),
+    "Estatísticas"
+  );
 }
 
 async function getAllIncidents(matches, tournamentName, seasonLabel, fullPath) {
-  let results = [];
-  try { if (fs.existsSync(fullPath)) results = JSON.parse(fs.readFileSync(fullPath, "utf8")); } catch(e) {}
-  
-  const total = matches.length;
-  for (let i = 0; i < total; i++) {
-    const match = matches[i];
-    process.stdout.write("  Incidentes: " + (i + 1) + "/" + total + " | " + match.home + " x " + match.away + "          \r");
-    try {
-      const data = await get("/event/" + match.id + "/incidents");
+  await processMatchesGeneric(
+    matches,
+    fullPath,
+    async (matchId) => await get(`/event/${matchId}/incidents`),
+    (data, match) => {
       const incidents = data.incidents || [];
-      incidents.forEach((inc) => {
-        if (inc.incidentType === "period" || inc.incidentType === "injuryTime") return;
-        results.push({
-          match_id: match.id, tournament_name: tournamentName, season: seasonLabel,
-          round: match.round, home_team: match.home, away_team: match.away,
-          incident_type: inc.incidentType, incident_class: inc.incidentClass,
-          minute: inc.time, added_time: inc.addedTime !== 999 ? inc.addedTime : null,
-          is_home: inc.isHome, player_name: inc.player?.name, player_id: inc.player?.id,
-          score_home: inc.homeScore, score_away: inc.awayScore
-        });
-      });
-    } catch (_) {}
-    await sleep(DELAY_MS);
-  }
-  fs.writeFileSync(fullPath, JSON.stringify(results, null, 2), "utf8");
+      return incidents
+        .filter(inc => inc.incidentType !== "period" && inc.incidentType !== "injuryTime")
+        .map(inc => ({
+          match_id: match.id,
+          tournament_name: tournamentName,
+          season: seasonLabel,
+          round: match.round,
+          home_team: match.home,
+          away_team: match.away,
+          incident_type: inc.incidentType,
+          incident_class: inc.incidentClass,
+          minute: inc.time,
+          added_time: inc.addedTime !== 999 ? inc.addedTime : null,
+          is_home: inc.isHome,
+          player_name: inc.player?.name,
+          player_id: inc.player?.id,
+          score_home: inc.homeScore,
+          score_away: inc.awayScore
+        }));
+    },
+    "Incidentes"
+  );
 }
 
 async function getAllLineups(matches, tournamentName, seasonLabel, fullPath) {
-  let results = [];
-  try { if (fs.existsSync(fullPath)) results = JSON.parse(fs.readFileSync(fullPath, "utf8")); } catch(e) {}
-  
-  const total = matches.length;
-  for (let i = 0; i < total; i++) {
-    const match = matches[i];
-    process.stdout.write("  Lineups: " + (i + 1) + "/" + total + " | " + match.home + " x " + match.away + "          \r");
-    let lineups = null;
-    try {
-      lineups = await get("/event/" + match.id + "/lineups");
-    } catch (_) {}
-    results.push({
-      matchId: match.id, tournamentName, season: seasonLabel, round: match.round,
-      home: match.home, away: match.away, scoreHome: match.scoreHome, scoreAway: match.scoreAway,
-      status: match.status, startTime: match.startTime, lineups: lineups
-    });
-    await sleep(DELAY_MS);
-  }
-  fs.writeFileSync(fullPath, JSON.stringify(results, null, 2), "utf8");
+  await processMatchesGeneric(
+    matches,
+    fullPath,
+    async (matchId) => await get(`/event/${matchId}/lineups`),
+    (data, match) => ({
+      matchId: match.id,
+      tournamentName,
+      season: seasonLabel,
+      round: match.round,
+      home: match.home,
+      away: match.away,
+      scoreHome: match.scoreHome,
+      scoreAway: match.scoreAway,
+      status: match.status,
+      startTime: match.startTime,
+      lineups: data || null
+    }),
+    "Lineups"
+  );
 }
 
 async function main() {
   console.log("=== MOTOR DE EXTRAÇÃO REAL ATIVO ===\n");
+  
+  // MELHORIA: Validar ambiente no início
+  validateEnvironment();
+  
   const processedGames = loadProcessedGames();
 
   // MELHORIA 1 e 2: Parsing da lista de módulos do Painel
@@ -231,6 +313,7 @@ async function main() {
   const matches = await getAllMatches(season.id, rounds, processedGames);
   if (matches.length === 0) {
     console.log("\n✅ Base de dados já está atualizada!");
+    console.log(`Estatísticas: ${processedGames.size} partidas processadas no total`);
     return;
   }
 
@@ -238,8 +321,10 @@ async function main() {
   const seasonLabel = season.name || season.year;
   const fileNameBase = `${process.env.SE_TOURNAMENT_NAME}_${process.env.SE_SEASON}`;
 
+  console.log(`\n📊 Iniciando processamento de ${matches.length} novas partidas...\n`);
+
   if (extrairStats) {
-    console.log("\nExtraindo Estatísticas...");
+    console.log("Extraindo Estatísticas...");
     await getAllStatistics(matches, path.join(OUTPUT_DIR, `results_${fileNameBase}.json`));
   }
 
@@ -255,10 +340,19 @@ async function main() {
 
   matches.forEach(m => processedGames.add(m.id));
   saveProcessedGames(processedGames);
-  console.log("\n=== CONCLUIDO ===");
+
+  console.log("\n" + "=".repeat(50));
+  console.log("✅ PROCESSO CONCLUÍDO COM SUCESSO!");
+  console.log("=".repeat(50));
+  console.log(`📈 Resumo Final:`);
+  console.log(`  • Partidas processadas: ${matches.length}`);
+  console.log(`  • Total acumulado: ${processedGames.size}`);
+  console.log(`  • Diretório de saída: ${OUTPUT_DIR}`);
+  console.log(`  • Módulos extraídos: ${[extrairStats && 'Estatísticas', extrairIncidents && 'Incidentes', extrairLineups && 'Lineups'].filter(Boolean).join(', ')}`);
+  console.log("=".repeat(50) + "\n");
 }
 
 main().catch((err) => {
-  console.error("\nErro Crítico: " + err.message);
+  console.error("\n❌ Erro Crítico: " + err.message);
   process.exit(1);
 });
