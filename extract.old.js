@@ -133,23 +133,11 @@ async function getAllMatches(seasonId, rounds, processedGames) {
   const total = rounds.length;
 
   for (let i = 0; i < rounds.length; i++) {
-    const roundObj = rounds[i];
-    
-    // 🔧 MUDANÇA: Construir endpoint com slug e prefix
-    let endpoint = `/unique-tournament/${TOURNAMENT_ID}/season/${seasonId}/events/round/${roundObj.round}`;
-    
-    if (roundObj.slug) {
-      endpoint += `/slug/${roundObj.slug}`;
-    }
-    if (roundObj.prefix) {
-      endpoint += `/prefix/${roundObj.prefix}`;
-    }
-
-    const displayName = roundObj.name || `Round ${roundObj.round}`;
-    process.stdout.write("  Rodada " + displayName + "/" + total + "...          \r");
+    const roundNum = rounds[i].round;
+    process.stdout.write("  Rodada " + roundNum + "/" + total + "...          \r");
 
     try {
-      const data = await get(endpoint);
+      const data = await get("/unique-tournament/" + TOURNAMENT_ID + "/season/" + seasonId + "/events/round/" + roundNum);
       const filterPostponed  = !GUI_MODE || process.env.SE_FILTER_POSTPONED  !== "0";
       const filterHalftime   = !GUI_MODE || process.env.SE_FILTER_HALFTIME   !== "0";
       const filterNotStarted = !GUI_MODE || process.env.SE_FILTER_NOTSTARTED !== "0";
@@ -162,20 +150,15 @@ async function getAllMatches(seasonId, rounds, processedGames) {
         if (processedGames.has(e.id)) return;
 
         allMatches.push({
-          id: e.id, 
-          round: displayName,  // 🔧 MUDANÇA: Usa displayName em vez de roundNum
-          home: e.homeTeam.name, 
-          away: e.awayTeam.name,
-          scoreHome: e.homeScore?.current, 
-          scoreAway: e.awayScore?.current,
-          status: desc, 
-          startTime: e.startTimestamp ? new Date(e.startTimestamp * 1000).toISOString() : null,
+          id: e.id, round: roundNum, home: e.homeTeam.name, away: e.awayTeam.name,
+          scoreHome: e.homeScore?.current, scoreAway: e.awayScore?.current,
+          status: desc, startTime: e.startTimestamp ? new Date(e.startTimestamp * 1000).toISOString() : null,
         });
 
         processedGames.add(e.id);
       });
     } catch (err) {
-      console.warn(`[AVISO] Erro ao buscar partidas da rodada ${displayName}: ${err.message}`);
+      console.warn(`[AVISO] Erro ao buscar partidas da rodada ${roundNum}: ${err.message}`);
     }
     await sleep(DELAY_MS);
   }
